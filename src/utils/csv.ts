@@ -82,6 +82,13 @@ export function parseCSVLine(line: string): string[] {
  * @returns CSV-encoded line
  */
 export function encodeCSVLine(values: string[]): string {
-  return values.map(encodeCSVValue).join(',');
+  if (values.length === 0) return '';
+  
+  // Optimized: pre-allocate array and join once
+  const encoded: string[] = new Array(values.length);
+  for (let i = 0; i < values.length; i++) {
+    encoded[i] = encodeCSVValue(values[i]);
+  }
+  return encoded.join(',');
 }
 

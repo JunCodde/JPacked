@@ -29,13 +29,10 @@ function parseSchema(line: string): SchemaField[] {
  */
 function decodeRow(
   csvLine: string,
-  schema: SchemaField[]
+  flatSchema: Array<{ name: string; isArray: boolean; arrayChildren?: SchemaField[] }>
 ): Record<string, any> {
   const values = parseCSVLine(csvLine);
   const flat: Record<string, any> = {};
-  
-  // Flatten schema for decoding
-  const flatSchema = flattenSchema(schema);
   
   for (let i = 0; i < flatSchema.length; i++) {
     const field = flatSchema[i];
@@ -188,6 +185,9 @@ export function decode<T = Record<string, any>>(jpackedString: string): DecodeRe
   // Parse schema
   const schema = parseSchema(lines[2]);
   
+  // Pre-compute flattened schema (only once)
+  const flatSchema = flattenSchema(schema);
+  
   // Find data section
   if (lines[3] !== 'data') {
     throw new Error(`Expected "data" marker, got "${lines[3]}"`);
@@ -196,7 +196,7 @@ export function decode<T = Record<string, any>>(jpackedString: string): DecodeRe
   // Parse data rows
   const data: T[] = [];
   for (let i = 4; i < lines.length; i++) {
-    const row = decodeRow(lines[i], schema);
+    const row = decodeRow(lines[i], flatSchema);
     data.push(row as T);
   }
   

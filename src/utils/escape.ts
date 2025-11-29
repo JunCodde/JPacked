@@ -12,10 +12,16 @@
  * @returns Encoded string with | delimiter
  */
 export function encodeArray(arr: string[]): string {
+  if (arr.length === 0) return '';
+  
+  // Optimized: single replace with function
   return arr
     .map((item) => {
-      // Escape backslashes first
-      return item.replace(/\\/g, '\\\\').replace(/\|/g, '\\|');
+      if (item.includes('\\') || item.includes('|')) {
+        // Only escape if needed
+        return item.replace(/[\\|]/g, (m) => m === '\\' ? '\\\\' : '\\|');
+      }
+      return item;
     })
     .join('|');
 }

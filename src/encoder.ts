@@ -29,11 +29,7 @@ function encodeSchema(schema: SchemaField[]): string {
 /**
  * Encodes a data row into CSV format
  */
-function encodeRow(row: Record<string, any>, schema: SchemaField[]): string {
-  // Flatten the row and schema for encoding
-  const flattened = flattenObject(row);
-  const flatSchema = flattenSchema(schema);
-  
+function encodeRow(row: Record<string, any>, flatSchema: Array<{ name: string; isArray: boolean; arrayChildren?: SchemaField[] }>, flattened: Record<string, any>): string {
   const values = flatSchema.map((field) => {
     const value = flattened[field.name];
     
@@ -93,15 +89,26 @@ function encodeRow(row: Record<string, any>, schema: SchemaField[]): string {
                             nestedObjectStrings.push(String(nestedItem));
                           }
                         }
-                        // Join nested objects with | and escape
+                        // Join nested objects with | and escape (optimized)
                         const nestedStr = nestedObjectStrings
-                          .map((v) => v.replace(/\\/g, '\\\\').replace(/\|/g, '\\|'))
+                          .map((v) => {
+                            if (v.includes('\\') || v.includes('|')) {
+                              return v.replace(/[\\|]/g, (m) => m === '\\' ? '\\\\' : '\\|');
+                            }
+                            return v;
+                          })
                           .join('|');
                         objectValues.push(nestedStr);
                       } else {
-                        // Array of primitives
+                        // Array of primitives (optimized)
                         const arrayStr = childValue
-                          .map((v) => String(v).replace(/\\/g, '\\\\').replace(/\|/g, '\\|'))
+                          .map((v) => {
+                            const s = String(v);
+                            if (s.includes('\\') || s.includes('|')) {
+                              return s.replace(/[\\|]/g, (m) => m === '\\' ? '\\\\' : '\\|');
+                            }
+                            return s;
+                          })
                           .join('|');
                         objectValues.push(arrayStr);
                       }
@@ -118,9 +125,14 @@ function encodeRow(row: Record<string, any>, schema: SchemaField[]): string {
               }
             }
             
-            // Join all objects with | and escape
+            // Join all objects with | and escape (optimized)
             const result = objectStrings
-              .map((item) => item.replace(/\\/g, '\\\\').replace(/\|/g, '\\|'))
+              .map((item) => {
+                if (item.includes('\\') || item.includes('|')) {
+                  return item.replace(/[\\|]/g, (m) => m === '\\' ? '\\\\' : '\\|');
+                }
+                return item;
+              })
               .join('|');
             
             // Return as CSV value (will be quoted if contains comma or |)
@@ -137,11 +149,13 @@ function encodeRow(row: Record<string, any>, schema: SchemaField[]): string {
                 return String(item);
               }
             });
-            // Use pipe delimiter for arrays
+            // Use pipe delimiter for arrays (optimized)
             return encodedArray
               .map((item) => {
-                // Escape pipes and backslashes in array items
-                return item.replace(/\\/g, '\\\\').replace(/\|/g, '\\|');
+                if (item.includes('\\') || item.includes('|')) {
+                  return item.replace(/[\\|]/g, (m) => m === '\\' ? '\\\\' : '\\|');
+                }
+                return item;
               })
               .join('|');
           }
@@ -166,26 +180,32 @@ function encodeRow(row: Record<string, any>, schema: SchemaField[]): string {
                 return String(item);
               }
             });
-            // Use pipe delimiter for arrays
+            // Use pipe delimiter for arrays (optimized)
             return encodedArray
               .map((item) => {
-                // Escape pipes and backslashes in array items
-                return item.replace(/\\/g, '\\\\').replace(/\|/g, '\\|');
+                if (item.includes('\\') || item.includes('|')) {
+                  return item.replace(/[\\|]/g, (m) => m === '\\' ? '\\\\' : '\\|');
+                }
+                return item;
               })
               .join('|');
           } else {
-            // Array of primitives only
-            const encodedArray = value.map((item) => {
+            // Array of primitives only (optimized)
+            const encodedArray: string[] = [];
+            for (const item of value) {
               if (item === null || item === undefined) {
-                return '';
+                encodedArray.push('');
+              } else {
+                encodedArray.push(String(item));
               }
-              return String(item);
-            });
-            // Use pipe delimiter for arrays
+            }
+            // Use pipe delimiter for arrays (optimized)
             return encodedArray
               .map((item) => {
-                // Escape pipes and backslashes in array items
-                return item.replace(/\\/g, '\\\\').replace(/\|/g, '\\|');
+                if (item.includes('\\') || item.includes('|')) {
+                  return item.replace(/[\\|]/g, (m) => m === '\\' ? '\\\\' : '\\|');
+                }
+                return item;
               })
               .join('|');
           }
@@ -236,9 +256,14 @@ export function encode(
   // Data section
   lines.push('data');
   
+  // Pre-compute flattened schema (only once)
+  const flatSchema = flattenSchema(schema);
+  
   // Data rows
   for (const row of dataArray) {
-    lines.push(encodeRow(row, schema));
+    // Flatten row once per row
+    const flattened = flattenObject(row);
+    lines.push(encodeRow(row, flatSchema, flattened));
   }
   
   return lines.join('\n');
