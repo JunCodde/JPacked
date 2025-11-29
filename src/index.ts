@@ -12,6 +12,7 @@ export { decode } from './decoder';
 // Types
 export type {
   JPACKEDMetadata,
+  EncodeMetadata,
   SchemaField,
   EncodeOptions,
   DecodeResult,
@@ -22,6 +23,9 @@ export type {
 export { encodeArray, decodeArray } from './utils/escape';
 export { encodeCSVValue, parseCSVLine, encodeCSVLine } from './utils/csv';
 export { parseMetadata, encodeMetadata } from './utils/meta';
+export { encodeObject, decodeObject, decodeArrayWithObjects } from './utils/object';
+export { flattenObject, unflattenObject } from './utils/flatten';
+export { extractNestedSchema, encodeNestedSchema, parseNestedSchema, flattenSchema } from './utils/schema';
 
 // Middlewares
 export { jpackedEncoder, type JPACKEDResponse } from './middleware/expressEncoder';

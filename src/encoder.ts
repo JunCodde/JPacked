@@ -1,44 +1,41 @@
-import type { JPACKEDMetadata, SchemaField } from './types';
+import type { JPACKEDMetadata, SchemaField, EncodeMetadata } from './types';
 import { encodeMetadata } from './utils/meta';
 import { encodeCSVLine } from './utils/csv';
 import { encodeArray } from './utils/escape';
+import { flattenObject } from './utils/flatten';
+import { encodeObject } from './utils/object';
+import { extractNestedSchema, encodeNestedSchema, flattenSchema } from './utils/schema';
 
 /**
- * Extracts schema from data objects
+ * Extracts schema from data objects with nested structure
  */
 function extractSchema(data: Record<string, any>[]): SchemaField[] {
   if (data.length === 0) {
     return [];
   }
   
-  const schema: SchemaField[] = [];
-  const firstRow = data[0];
-  
-  for (const key in firstRow) {
-    const value = firstRow[key];
-    const isArray = Array.isArray(value);
-    schema.push({ name: key, isArray });
-  }
-  
-  return schema;
+  // Extract nested schema from first row
+  return extractNestedSchema(data[0]);
 }
 
 /**
- * Encodes schema into JPACKED schema line
+ * Encodes schema into JPACKED schema line with nested format
  */
 function encodeSchema(schema: SchemaField[]): string {
-  const fields = schema.map((field) => {
-    return field.isArray ? `${field.name}[]` : field.name;
-  });
-  return `schema{${fields.join(',')}}`;
+  const encoded = encodeNestedSchema(schema);
+  return `schema{${encoded}}`;
 }
 
 /**
  * Encodes a data row into CSV format
  */
 function encodeRow(row: Record<string, any>, schema: SchemaField[]): string {
-  const values = schema.map((field) => {
-    const value = row[field.name];
+  // Flatten the row and schema for encoding
+  const flattened = flattenObject(row);
+  const flatSchema = flattenSchema(schema);
+  
+  const values = flatSchema.map((field) => {
+    const value = flattened[field.name];
     
     if (value === null || value === undefined) {
       return '';
@@ -46,13 +43,158 @@ function encodeRow(row: Record<string, any>, schema: SchemaField[]): string {
     
     if (field.isArray) {
       if (Array.isArray(value)) {
-        // Convert array items to strings and encode
-        const stringArray = value.map((item) => String(item));
-        return encodeArray(stringArray);
+        if (field.arrayChildren && field.arrayChildren.length > 0) {
+          // Check if all items are objects (for flattening)
+          const allObjects = value.every(item => 
+            item === null || 
+            item === undefined || 
+            (typeof item === 'object' && !Array.isArray(item))
+          );
+          
+          if (allObjects) {
+            // Array of objects - encode each object as CSV, separate objects with |
+            const flatChildren = flattenSchema(field.arrayChildren);
+            const objectStrings: string[] = [];
+            
+            for (const item of value) {
+              if (item === null || item === undefined) {
+                // Empty object - encode as empty CSV values
+                const emptyValues = flatChildren.map(() => '');
+                objectStrings.push(emptyValues.join(','));
+              } else if (typeof item === 'object' && !Array.isArray(item)) {
+                // Flatten the object
+                const flatItem = flattenObject(item);
+                // Get values in schema order
+                const objectValues: string[] = [];
+                for (const childField of flatChildren) {
+                  const childValue = flatItem[childField.name];
+                  
+                  if (childValue === null || childValue === undefined) {
+                    objectValues.push('');
+                  } else if (childField.isArray) {
+                    // Array within object - encode it
+                    if (Array.isArray(childValue)) {
+                      if (childField.arrayChildren && childField.arrayChildren.length > 0) {
+                        // Array of objects - recursive encoding as CSV
+                        const nestedFlatChildren = flattenSchema(childField.arrayChildren);
+                        const nestedObjectStrings: string[] = [];
+                        for (const nestedItem of childValue) {
+                          if (nestedItem === null || nestedItem === undefined) {
+                            const emptyNestedValues = nestedFlatChildren.map(() => '');
+                            nestedObjectStrings.push(emptyNestedValues.join(','));
+                          } else if (typeof nestedItem === 'object' && !Array.isArray(nestedItem)) {
+                            const nestedFlatItem = flattenObject(nestedItem);
+                            const nestedValues = nestedFlatChildren.map(f => {
+                              const v = nestedFlatItem[f.name];
+                              return v === null || v === undefined ? '' : String(v);
+                            });
+                            nestedObjectStrings.push(nestedValues.join(','));
+                          } else {
+                            nestedObjectStrings.push(String(nestedItem));
+                          }
+                        }
+                        // Join nested objects with | and escape
+                        const nestedStr = nestedObjectStrings
+                          .map((v) => v.replace(/\\/g, '\\\\').replace(/\|/g, '\\|'))
+                          .join('|');
+                        objectValues.push(nestedStr);
+                      } else {
+                        // Array of primitives
+                        const arrayStr = childValue
+                          .map((v) => String(v).replace(/\\/g, '\\\\').replace(/\|/g, '\\|'))
+                          .join('|');
+                        objectValues.push(arrayStr);
+                      }
+                    } else {
+                      objectValues.push('');
+                    }
+                  } else {
+                    // Primitive value
+                    objectValues.push(String(childValue));
+                  }
+                }
+                // Join object values with comma (CSV format)
+                objectStrings.push(objectValues.join(','));
+              }
+            }
+            
+            // Join all objects with | and escape
+            const result = objectStrings
+              .map((item) => item.replace(/\\/g, '\\\\').replace(/\|/g, '\\|'))
+              .join('|');
+            
+            // Return as CSV value (will be quoted if contains comma or |)
+            return result;
+          } else {
+            // Mixed array - use object format for objects, primitives as-is
+            const encodedArray = value.map((item) => {
+              if (item === null || item === undefined) {
+                return '';
+              } else if (typeof item === 'object' && !Array.isArray(item)) {
+                // Object in mixed array - use object format (keys will be repeated, but it's a mixed array)
+                return encodeObject(item);
+              } else {
+                return String(item);
+              }
+            });
+            // Use pipe delimiter for arrays
+            return encodedArray
+              .map((item) => {
+                // Escape pipes and backslashes in array items
+                return item.replace(/\\/g, '\\\\').replace(/\|/g, '\\|');
+              })
+              .join('|');
+          }
+        } else {
+          // Array of primitives or mixed - check if there are objects
+          const hasObjects = value.some(item => 
+            item !== null && 
+            item !== undefined && 
+            typeof item === 'object' && 
+            !Array.isArray(item)
+          );
+          
+          if (hasObjects) {
+            // Mixed array - use object format for objects, primitives as-is
+            const encodedArray = value.map((item) => {
+              if (item === null || item === undefined) {
+                return '';
+              } else if (typeof item === 'object' && !Array.isArray(item)) {
+                // Object in mixed array - use object format (keys will be repeated, but it's a mixed array)
+                return encodeObject(item);
+              } else {
+                return String(item);
+              }
+            });
+            // Use pipe delimiter for arrays
+            return encodedArray
+              .map((item) => {
+                // Escape pipes and backslashes in array items
+                return item.replace(/\\/g, '\\\\').replace(/\|/g, '\\|');
+              })
+              .join('|');
+          } else {
+            // Array of primitives only
+            const encodedArray = value.map((item) => {
+              if (item === null || item === undefined) {
+                return '';
+              }
+              return String(item);
+            });
+            // Use pipe delimiter for arrays
+            return encodedArray
+              .map((item) => {
+                // Escape pipes and backslashes in array items
+                return item.replace(/\\/g, '\\\\').replace(/\|/g, '\\|');
+              })
+              .join('|');
+          }
+        }
       } else {
         return '';
       }
     } else {
+      // Primitive value - already flattened
       return String(value);
     }
   });
@@ -62,28 +204,40 @@ function encodeRow(row: Record<string, any>, schema: SchemaField[]): string {
 
 /**
  * Encodes data into JPACKED format
- * @param data Array of objects to encode
- * @param metadata Metadata information
+ * @param data Array of objects or a single object to encode
+ * @param metadata Optional metadata (count is auto-calculated from data.length if not provided)
  * @returns JPACKED-encoded string
  */
-export function encode(data: Record<string, any>[], metadata: JPACKEDMetadata): string {
+export function encode(
+  data: Record<string, any>[] | Record<string, any>,
+  metadata?: EncodeMetadata
+): string {
+  // Normalize: convert single object to array
+  const dataArray = Array.isArray(data) ? data : [data];
+  
   const lines: string[] = [];
   
   // Header
   lines.push('JPACKED/1.1');
   
-  // Metadata
-  lines.push(encodeMetadata(metadata));
+  // Metadata - auto-calculate count from data.length if not provided
+  const fullMetadata: JPACKEDMetadata = {
+    count: metadata?.count ?? dataArray.length,
+    page: metadata?.page,
+    pageCount: metadata?.pageCount,
+    total: metadata?.total,
+  };
+  lines.push(encodeMetadata(fullMetadata));
   
   // Schema
-  const schema = extractSchema(data);
+  const schema = extractSchema(dataArray);
   lines.push(encodeSchema(schema));
   
   // Data section
   lines.push('data');
   
   // Data rows
-  for (const row of data) {
+  for (const row of dataArray) {
     lines.push(encodeRow(row, schema));
   }
   

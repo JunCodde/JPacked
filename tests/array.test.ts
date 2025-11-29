@@ -93,7 +93,8 @@ describe('Array Encoding/Decoding', () => {
         { id: 2, tags: ['tag3|special', 'tag4\\back'], name: 'Complex' },
       ];
       
-      const encoded = encode(data, { count: 2 });
+      // count is auto-calculated from data.length
+      const encoded = encode(data);
       const decoded = decode(encoded);
       
       expect(decoded.data[0].tags).toEqual(['tag1', 'tag2']);
