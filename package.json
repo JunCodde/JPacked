@@ -1,6 +1,6 @@
 {
   "name": "jpacked",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "A compact data format alternative to JSON, based on schema + CSV",
   "main": "dist/index.cjs",
   "module": "dist/index.js",
