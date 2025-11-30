@@ -1,6 +1,7 @@
 # JPACKED
 
-[![npm version](https://badge.fury.io/js/jpacked.svg)](https://badge.fury.io/js/jpacked)
+[![npm version](https://img.shields.io/npm/v/jpacked.svg)](https://www.npmjs.com/package/jpacked)
+[![npm downloads](https://img.shields.io/npm/dm/jpacked.svg)](https://www.npmjs.com/package/jpacked)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 **JPACKED** es un formato de datos compacto alternativo a JSON, basado en **schema + CSV** con soporte para metadatos y arrays. Diseñado para reducir el tamaño de las respuestas API y mejorar el rendimiento en transferencias de datos. 
