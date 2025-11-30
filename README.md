@@ -920,9 +920,10 @@ data
 ## ⚠️ Limitaciones
 
 1. **Schema fijo**: Todas las filas deben tener la misma estructura (mismos campos)
-2. **Objetos anidados como JSON**: Los objetos anidados se codifican como JSON stringificado, lo que puede aumentar el tamaño si hay muchos objetos anidados
-3. **No es estándar**: Formato propietario, requiere librería para parsear
-4. **Tipos inferidos**: Los tipos se infieren automáticamente (números, booleanos, JSON), pero no hay validación de esquema estricta
+2. **No es estándar**: Formato propietario, requiere librería para parsear
+3. **Tipos inferidos**: Los tipos se infieren automáticamente (números, booleanos, JSON), pero no hay validación de esquema estricta
+
+**Nota**: Los objetos anidados están completamente soportados usando el formato JPACKED con schema anidado y aplanamiento interno, lo que permite estructuras complejas sin límite de profundidad y sin aumentar significativamente el tamaño de los datos.
 
 ## 🤖 Uso con APIs de IA
 
